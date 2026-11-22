@@ -69,7 +69,36 @@ function OffsetRecord() {
     if (a?.needsReason && reasonFor !== id) { setReasonFor(id); setReason(""); return; }
     const r = runOffsetAction(data, rules, s, o.id, id, { reason });
     if (!r.ok) return void toast.error(r.error);
-    setData(r.value); setReasonFor(null); setReason(""); toast.success(`${a?.label ?? id}: done`);
+    setData(r.value); setReasonFor(null); setReason("");
+    const result = findOffset(r.value, o.id);
+    if (!result) return;
+    const resultCurrency = result.frozen?.currency ?? result.minutes?.figures.currency ?? c;
+    const resultAmount = fmtMoney(result.frozen?.amount ?? result.amount, resultCurrency, rules);
+    switch (id) {
+      case "approve-post": {
+        const target = billFigures(r.value, rules, result.targetBillId);
+        toast.success(`Posted as ${result.journalId}. ${result.targetBillId} now has ${target ? fmtMoney(target.billOpen, target.currency, rules) : "an updated balance"} open.`);
+        break;
+      }
+      case "reverse":
+        toast.success(`Reversed with ${result.reversal?.journalId}. ${resultAmount} credit returned to ${result.sourcePoId}.`);
+        break;
+      case "submit":
+        toast.success(`${result.id} sent to Accounting for review.`);
+        break;
+      case "generate-minutes":
+        toast.success(`${result.minutes?.number} generated. Amounts are locked for signature.`);
+        break;
+      case "approve":
+        toast.success(`${result.id}: first approval recorded. A second accountant must approve and post.`);
+        break;
+      case "return":
+        toast.success(`${result.id} returned to Draft. Minutes voided.`);
+        break;
+      case "cancel":
+        toast.success(`${result.id} cancelled. ${resultAmount} credit released on ${result.sourcePoId}.`);
+        break;
+    }
   };
 
   return (
@@ -186,6 +215,9 @@ function Minutes({ o }: { o: Offset }) {
   const sup = po ? findSupplier(data, po.supplierId) : undefined;
   const c = po?.currency ?? "";
   const editable = s.role === "Purchasing" && o.status === "Awaiting signature";
+  const lockedMoney = (value: number) => m?.balances
+    ? `${formatNumber(value, m.balances.decimals)} ${m.balances.currency}`
+    : fmtMoney(value, m?.figures.currency ?? c, rules);
   return (
     <Section title="Minutes · Biên bản cấn trừ công nợ" right={o.voidedMinutes.length > 0 ? <span className="formula">{o.voidedMinutes.length} voided version(s)</span> : null}>
       {!m ? <p className="p-3 text-xs text-muted-foreground">{o.status === "Draft" ? "Generate minutes to lock the amounts." : "No minutes."}</p> : (
@@ -198,7 +230,20 @@ function Minutes({ o }: { o: Offset }) {
             <p><b>Bên B / Party B:</b> {sup?.name} (supplier / nhà cung cấp)</p>
             <p className="mt-2">Hai bên thống nhất cấn trừ số tiền ứng trước của đơn hàng <b>{o.sourcePoId}</b> vào hóa đơn <b>{o.targetBillId}</b> với số tiền:</p>
             <p className="italic">Both parties agree to offset the advance paid on <b>{o.sourcePoId}</b> against bill <b>{o.targetBillId}</b> for the amount of:</p>
-            <p className="my-2 text-center text-lg font-bold">{fmtMoney(m.amount, c, rules)}</p>
+            <p className="my-2 text-center text-lg font-bold">{lockedMoney(m.amount)}</p>
+            <table aria-label="Locked minutes balances" className="dt my-3 w-full table-fixed [&_th]:whitespace-normal">
+              <colgroup><col className="w-2/3" /><col className="w-1/3" /></colgroup>
+              <thead><tr><th scope="col">Nội dung / Description</th><th scope="col" className="num">Số tiền / Amount</th></tr></thead>
+              <tbody>
+                {[
+                  { vi: "Tiền ứng trước chưa sử dụng", en: `Unused advance on ${o.sourcePoId}`, value: m.balances?.sourcePoCredit },
+                  { vi: "Công nợ hóa đơn trước cấn trừ", en: `Amount open on ${o.targetBillId}`, value: m.balances?.targetBillOpen },
+                  { vi: "Số tiền cấn trừ", en: "Amount offset", value: m.balances?.offsetAmount ?? m.amount },
+                  { vi: "Công nợ hóa đơn còn phải thanh toán sau cấn trừ", en: "Amount still payable after offset", value: m.balances?.targetBillAfter },
+                ].map((row) => <tr key={row.en}><th scope="row" className="font-normal"><span className="block">{row.vi}</span><span className="block font-normal italic">{row.en}</span></th><td className="num align-middle">{row.value === undefined ? "—" : lockedMoney(row.value)}</td></tr>)}
+              </tbody>
+            </table>
+            {!m.balances && <p className="text-xs text-muted-foreground">Biên bản cũ chưa lưu số dư / These older minutes have no saved balance snapshot.</p>}
             <p>Sau cấn trừ, công nợ còn lại của hóa đơn được thanh toán theo điều khoản hợp đồng. / After the offset, the remaining bill balance is paid per contract terms.</p>
             <div className="mt-8 grid grid-cols-2 gap-6 text-center">
               {["A", "B"].map((p) => <div key={p}><b>ĐẠI DIỆN BÊN {p}</b><div className="italic">For Party {p}</div><div className="mt-14 border-t pt-1 text-xs">(Ký, ghi rõ họ tên, đóng dấu / Sign, full name, stamp)</div></div>)}

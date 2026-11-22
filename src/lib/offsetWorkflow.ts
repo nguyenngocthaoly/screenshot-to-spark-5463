@@ -5,8 +5,10 @@
 import type { Rules } from "@/config/rules";
 import type { Dataset, Offset, OffsetStatus, Role } from "@/data/types";
 import {
+  billFigures,
   billEligibility,
   computeOffsetFigures,
+  currencyDecimals,
   fail,
   findOffset,
   findPo,
@@ -398,6 +400,11 @@ export function runOffsetAction(
         offset,
       });
       if (!fig.ok) return fig;
+      const source = poFigures(data, rules, offset.sourcePoId);
+      const before = billFigures(data, rules, offset.targetBillId);
+      // Reuse the existing bill calculation for the projected posting; no new money formula.
+      const after = billFigures({ ...data, offsets: data.offsets.map((o) => o.id === offset.id ? { ...o, status: "Posted" } : o) }, rules, offset.targetBillId);
+      if (!source || !before || !after) return fail("Source PO or target bill is missing");
       const previous = offset.voidedMinutes.find((m) => /^BBCTCN-\d{4}-\d{2}-\d{3,}/.test(m.number));
       const base = previous?.number.replace(/^(BBCTCN-\d{4}-\d{2}-\d{3,})(?:-\d+)?$/, "$1") ?? nextDocumentNumber(data, "BBCTCN");
       const n = offset.voidedMinutes.filter((m) => m.number === base || m.number.startsWith(`${base}-`)).length + 1;
@@ -410,6 +417,14 @@ export function runOffsetAction(
           generatedBy: session.userName,
           amount: offset.amount,
           figures: fig.value,
+          balances: {
+            sourcePoCredit: source.creditOnPO,
+            targetBillOpen: before.billOpen,
+            offsetAmount: fig.value.amount,
+            targetBillAfter: after.billOpen,
+            currency: fig.value.currency,
+            decimals: currencyDecimals(fig.value.currency, rules),
+          },
           voided: false,
         },
       };

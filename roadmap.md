@@ -7,3 +7,6 @@
 - [x] Plain validation messages without formula changes
 - [x] Neutral zero-credit PO state
 - [x] Automated and browser verification
+- [ ] Locked bilingual balance table in minutes
+- [ ] Result-specific action notifications
+- [ ] Verify locked balances, notifications and existing tests

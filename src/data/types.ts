@@ -139,6 +139,15 @@ export interface OffsetMinutes {
   generatedBy: string;
   amount: number;
   figures: OffsetFigures;
+  /** Absent on older saved minutes; never reconstruct historical balances from live data. */
+  balances?: {
+    sourcePoCredit: number;
+    targetBillOpen: number;
+    offsetAmount: number;
+    targetBillAfter: number;
+    currency: Currency;
+    decimals: number;
+  };
   voided: boolean;
 }
 

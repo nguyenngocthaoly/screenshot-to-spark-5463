@@ -25,7 +25,7 @@ function action(data: Dataset, id: ActionId, session = purchasing, reason = "Cor
   return r.value;
 }
 function review(data: Dataset) {
-  data = action(data, "generate-minutes");
+  if (first(data).status === "Draft") data = action(data, "generate-minutes");
   const attached = attachSignedFile(data, purchasing, first(data).id, { name: "signed.pdf", size: 1 });
   if (!attached.ok) throw new Error(attached.error);
   const amount = setSignedAmount(attached.value, purchasing, first(data).id, String(first(data).amount));
@@ -118,6 +118,33 @@ describe("cancellation", () => {
 });
 
 describe("document IDs and reversal", () => {
+  it.each([
+    ["sourcePoCredit", 4800],
+    ["targetBillOpen", 12000],
+    ["offsetAmount", 4800],
+    ["targetBillAfter", 7200],
+  ] as const)("locks minutes %s at generation, even after balances change", (field, expected) => {
+    const generated = action(draft(), "generate-minutes");
+    expect(first(generated).minutes?.balances?.[field]).toBe(expected);
+    const changed = {
+      ...generated,
+      payments: generated.payments.map((p) => p.poId === "PO-101" ? { ...p, amount: p.amount + 1000 } : p),
+      bills: generated.bills.map((b) => b.id === "BILL-102" ? { ...b, amount: 20000 } : b),
+    };
+    const posted = action(review(changed), "approve-post", accounting);
+    expect(first(posted).minutes?.balances?.[field]).toBe(expected);
+    expect(first(action(posted, "reverse", accounting)).minutes?.balances?.[field]).toBe(expected);
+  });
+  it("captures fresh balances only after voiding and regenerating minutes", () => {
+    let data = action(draft(), "generate-minutes");
+    data = { ...data, bills: data.bills.map((b) => b.id === "BILL-102" ? { ...b, amount: 20000 } : b) };
+    const edited = updateOffsetDraft(data, rules, purchasing, first(data).id, { sourcePoId: "PO-101", targetBillId: "BILL-102", amountRaw: "4800" });
+    if (!edited.ok) throw new Error(edited.error);
+    const regenerated = action(edited.value, "generate-minutes");
+    expect(first(regenerated).minutes?.balances?.targetBillOpen).toBe(20000);
+    expect(first(regenerated).minutes?.balances?.targetBillAfter).toBe(15200);
+    expect(first(regenerated).voidedMinutes[0]?.balances?.targetBillAfter).toBe(7200);
+  });
   it("assigns JE-2026-11-001 then JE-2026-11-002 and freezes swapped lines", () => {
     const posted = action(review(draft()), "approve-post", accounting);
     const original = structuredClone(first(posted).frozen);
