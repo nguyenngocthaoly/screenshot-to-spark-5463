@@ -224,14 +224,16 @@ export function offsetLimits(
   const bill = billFigures(data, rules, targetBillId, { excludeOffsetId });
   if (!bill) return fail(`Target bill ${targetBillId} not found`);
   const c = po.currency;
-  const m = (v: number) => fmtMoney(v, c, rules);
+  const m = (v: number) => formatNumber(v, currencyDecimals(c, rules));
   const billCapacity = roundMoney(bill.billOpen - bill.held - bill.inPaymentRun, c, rules);
   const cap = po.available <= billCapacity ? "source" : "bill";
   const maxOffset = Math.max(0, Math.min(po.available, billCapacity));
   const capText =
     cap === "source"
-      ? `${po.po.id} available credit ${m(po.available)} = credit ${m(po.creditOnPO)} − ${m(po.reserved)} reserved by other offsets`
-      : `${bill.bill.id} payable ${m(billCapacity)} = open ${m(bill.billOpen)} − ${m(bill.held)} held by other offsets − ${m(bill.inPaymentRun)} already in a payment run`;
+      ? po.reserved > 0
+        ? `${po.po.id} has ${m(po.creditOnPO)} credit, ${m(po.reserved)} reserved by ${po.reservedBy.map((o) => o.id).join(", ")}`
+        : `${po.po.id} available credit is ${m(po.creditOnPO)}`
+      : `${bill.bill.id} has ${m(bill.billOpen)} open${bill.held > 0 ? `, ${m(bill.held)} held by ${bill.heldBy.map((o) => o.id).join(", ")}` : ""}${bill.inPaymentRun > 0 ? `, ${m(bill.inPaymentRun)} already in a payment run` : ""}`;
   return ok({ po, bill, available: po.available, billCapacity, maxOffset, cap, capText });
 }
 
@@ -274,21 +276,7 @@ export function validateOffsetAmount(
   if (value <= 0) return fail("Amount must be greater than 0");
   if (value > limits.maxOffset) {
     const m = (v: number) => fmtMoney(v, c, rules);
-    if (limits.maxOffset <= 0) return fail(`Nothing can be offset: ${limits.capText}`);
-    let why = "";
-    if (limits.cap === "source") {
-      why =
-        limits.po.reserved > 0
-          ? ` (${m(limits.po.reserved)} reserved by another offset: ${limits.po.reservedBy.map((o) => o.id).join(", ")})`
-          : "";
-    } else {
-      const parts: string[] = [];
-      if (limits.bill.held > 0)
-        parts.push(`${m(limits.bill.held)} held by another offset: ${limits.bill.heldBy.map((o) => o.id).join(", ")}`);
-      if (limits.bill.inPaymentRun > 0) parts.push(`${m(limits.bill.inPaymentRun)} already in a payment run`);
-      why = parts.length ? ` (${parts.join("; ")})` : "";
-    }
-    return fail(`Above the max of ${m(limits.maxOffset)} — limited by ${limits.capText}${why}`);
+    return fail(`Max is ${m(limits.maxOffset)}: ${limits.capText}.`);
   }
   return ok(roundHalfUp(value, d));
 }
@@ -529,8 +517,7 @@ export function billEligibility(
     else {
       const cap = roundMoney(figures.billOpen - figures.held - figures.inPaymentRun, figures.currency, rules);
       if (cap <= 0) {
-        const m = (v: number) => fmtMoney(v, figures.currency, rules);
-        reason = `Nothing open (open ${m(figures.billOpen)}, held ${m(figures.held)}, in payment run ${m(figures.inPaymentRun)})`;
+        reason = "Nothing open to offset";
       }
     }
     rows.push({ bill, figures, eligible: reason === null, reason, sameSupplier });

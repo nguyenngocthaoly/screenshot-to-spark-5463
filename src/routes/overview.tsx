@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useApp } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { personaOverviewTab, useApp } from "@/lib/store";
 import { findBill, findPo, findSupplier, findEntity, pendingReviewCount, reviewQueue, supplierCreditRanking } from "@/lib/offsetCalc";
 import { M, Section, StatusBadge } from "@/components/app/bits";
 
@@ -19,13 +20,15 @@ export const Route = createFileRoute("/overview")({
 });
 
 function Overview() {
-  const { data, rules } = useApp();
+  const { data, rules, role, userName } = useApp();
+  const [tab, setTab] = useState<string>(personaOverviewTab(role));
+  useEffect(() => setTab(personaOverviewTab(role)), [role, userName]);
   const q = reviewQueue(data);
   const ranking = supplierCreditRanking(data, rules);
   return (
     <div className="space-y-3 p-4">
       <h1 className="text-base font-semibold">Overview</h1>
-      <Tabs defaultValue="queue">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="h-8"><TabsTrigger value="queue" className="text-xs">Review queue ({pendingReviewCount(data)} pending)</TabsTrigger><TabsTrigger value="credit" className="text-xs">Supplier credit</TabsTrigger></TabsList>
         <TabsContent value="queue">
           <Section title="Review queue" right={<span className="formula">Pending review first, then by bill due date</span>}>

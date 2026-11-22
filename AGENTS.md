@@ -32,3 +32,6 @@ use the editor.
 ## Project rules
 - Business numbers are computed only in `src/lib/offsetCalc.ts` (pure over data + rules); workflow/permissions live in `src/lib/offsetWorkflow.ts`; components only format. Why: the spec requires one auditable calculation layer.
 - App state is a frontend-only store (`src/lib/store.ts`) seeded from `src/data/seed.ts` and persisted in localStorage; no backend. Why: prototype scope.
+
+- Persona selection derives the session role from the dataset user; legacy saved demos refresh seed personas without discarding transactions. Why: one switch must keep identity and permissions consistent.
+- Document identifiers and reversal journals are allocated and frozen in offsetWorkflow; journal types share a monthly sequence, minutes keep a separate sequence and revision suffix. Why: historical records must survive later data/rule edits.

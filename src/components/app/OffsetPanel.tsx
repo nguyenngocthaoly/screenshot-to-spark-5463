@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { setData, useApp } from "@/lib/store";
-import { billEligibility, computeOffsetFigures, findOffset, fmtMoney, offsetLimits, poFigures, roundMoney, validateOffsetAmount } from "@/lib/offsetCalc";
-import { createOffsetDraft, updateOffsetDraft } from "@/lib/offsetWorkflow";
+import { computeOffsetFigures, findOffset, fmtMoney, offsetLimits, poFigures, roundMoney, validateOffsetAmount } from "@/lib/offsetCalc";
+import { createOffsetDraft, updateOffsetDraft, targetBillChoices } from "@/lib/offsetWorkflow";
 import { Btn, M } from "./bits";
 import { formatNumber } from "@/lib/format";
 
@@ -14,7 +14,7 @@ export function OffsetPanel({ poId, offsetId, open, onClose }: { poId: string; o
   const { data, rules } = s;
   const nav = useNavigate();
   const existing = offsetId ? findOffset(data, offsetId) : undefined;
-  const bills = useMemo(() => billEligibility(data, rules, poId, offsetId), [data, rules, poId, offsetId]);
+  const { bills, hiddenCount: hiddenBills } = useMemo(() => targetBillChoices(data, rules, poId, offsetId), [data, rules, poId, offsetId]);
   const firstEligible = existing?.targetBillId ?? bills.find((b) => b.eligible)?.bill.id ?? "";
   const [billId, setBillId] = useState(firstEligible);
   const [raw, setRaw] = useState("");
@@ -22,9 +22,9 @@ export function OffsetPanel({ poId, offsetId, open, onClose }: { poId: string; o
   const po = poFigures(data, rules, poId, { excludeOffsetId: offsetId });
   const lim = billId ? offsetLimits(data, rules, poId, billId, offsetId) : null;
 
-  const prefill = (id: string) => {
+  const prefill = (id: string, useMaximum = false) => {
     const l = offsetLimits(data, rules, poId, id, offsetId);
-    const max = existing && id === existing.targetBillId ? existing.amount : l.ok ? l.value.maxOffset : 0;
+    const max = !useMaximum && existing && id === existing.targetBillId ? existing.amount : l.ok ? l.value.maxOffset : 0;
     setRaw(formatNumber(max, rules.zeroDecimalCurrencies.includes(po?.currency ?? "") ? 0 : 2));
     setTimeout(() => inputRef.current?.select(), 30);
   };
@@ -38,6 +38,7 @@ export function OffsetPanel({ poId, offsetId, open, onClose }: { poId: string; o
   const valid = lim?.ok ? validateOffsetAmount(raw, lim.value, rules) : null;
   const amt = valid?.ok ? valid.value : 0;
   const fig = valid?.ok ? computeOffsetFigures(data, rules, { sourcePoId: poId, targetBillId: billId, amount: amt, offset: existing }) : null;
+  const validationError = valid && !valid.ok ? valid.error : lim && !lim.ok ? lim.error : fig && !fig.ok ? fig.error : null;
   const canSave = !!valid?.ok && !!fig?.ok && s.role === "Purchasing";
 
   const save = () => {
@@ -78,12 +79,14 @@ export function OffsetPanel({ poId, offsetId, open, onClose }: { poId: string; o
             </label>
           ))}
         </div>
+        {hiddenBills > 0 && <p className="mt-2 text-xs text-muted-foreground">{hiddenBills} bills from other suppliers are not shown.</p>}
         <h3 className="section-title mt-4 mb-1">Amount ({c})</h3>
-        <input ref={inputRef} autoFocus value={raw} onFocus={(e) => e.target.select()} onChange={(e) => setRaw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()}
+        <div className="flex items-center gap-2">
+        <input aria-label="Offset amount" ref={inputRef} autoFocus value={raw} onFocus={(e) => e.target.select()} onChange={(e) => setRaw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()}
           className={cn("num h-9 w-full rounded-md border bg-card px-2 text-base", valid && !valid.ok && "border-destructive")} placeholder="e.g. 4800, 4,800 or 4.8k" />
-        {valid && !valid.ok && <p className="blocked-text mt-1">⛔ {valid.error}</p>}
-        {lim && !lim.ok && <p className="blocked-text mt-1">⛔ {lim.error}</p>}
-        {fig && !fig.ok && <p className="blocked-text mt-1">⛔ {fig.error}</p>}
+          <Btn tone="secondary" className="shrink-0" disabled={!lim?.ok || lim.value.maxOffset <= 0} onClick={() => prefill(billId, true)}>Use maximum</Btn>
+        </div>
+        {validationError && <p className="blocked-text mt-1">{validationError}</p>}
         {L && (
           <div className="panel mt-4 p-3 text-xs">
             <h3 className="section-title mb-2">Live preview</h3>

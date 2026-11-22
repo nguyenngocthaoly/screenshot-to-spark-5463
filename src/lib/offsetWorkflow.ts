@@ -46,6 +46,17 @@ function nextOffsetId(data: Dataset): string {
   return `OFS-${String(max + 1).padStart(4, "0")}`;
 }
 
+/** Both journal types share one monthly sequence; minutes have their own. */
+function nextDocumentNumber(data: Dataset, prefix: "JE" | "BBCTCN"): string {
+  const month = monthOf(data.asOfDate);
+  const pattern = new RegExp(`^${prefix}-${month}-(\\d{3,})(?:-\\d+)?$`);
+  const numbers = data.offsets.flatMap((o) => prefix === "JE"
+    ? [o.journalId, o.reversal?.journalId]
+    : [o.minutes?.number, ...o.voidedMinutes.map((m) => m.number)]);
+  const max = numbers.reduce((n, value) => Math.max(n, Number(value?.match(pattern)?.[1] ?? 0)), 0);
+  return `${prefix}-${month}-${String(max + 1).padStart(3, "0")}`;
+}
+
 function log(offset: Offset, data: Dataset, session: Session, action: string, note?: string): Offset {
   return {
     ...offset,
@@ -58,7 +69,7 @@ function replace(data: Dataset, offset: Offset): Dataset {
 }
 
 const roleBlock = (session: Session, role: Role, verb: string) =>
-  session.role === role ? null : `Only ${role} can ${verb} (viewing as ${session.role})`;
+  session.role === role ? null : `Only ${role} can ${verb}`;
 
 /* ------------------------------------------------------- offset credit gate */
 
@@ -69,17 +80,29 @@ export function offsetCreditBlockers(data: Dataset, rules: Rules, session: Sessi
   const f = poFigures(data, rules, poId);
   if (!f) return [...reasons, `PO ${poId} not found`];
   if (f.po.status === "Open" && rules.requireSourcePoClosed) {
-    reasons.push(`${f.po.id} is still Open — the source PO must be closed`);
+    reasons.push(`${f.po.id} is still Open`);
   }
   if (f.available <= 0) {
     reasons.push(
-      `No credit available: ${fmtMoney(f.creditOnPO, f.currency, rules)} credit − ${fmtMoney(f.reserved, f.currency, rules)} reserved`,
+      f.reserved > 0 ? `Credit fully reserved by ${f.reservedBy.map((o) => o.id).join(", ")}` : "No credit to offset",
     );
   }
   if (!billEligibility(data, rules, poId).some((b) => b.eligible)) {
-    reasons.push("No eligible bill (same supplier, entity and currency, with something open)");
+    reasons.push("No eligible bill");
   }
   return reasons;
+}
+
+/** Visible target choices are supplier-scoped; eligibility reasons stay intact. */
+export function targetBillChoices(data: Dataset, rules: Rules, poId: string, offsetId?: string) {
+  const all = billEligibility(data, rules, poId, offsetId);
+  return { bills: all.filter((b) => b.sameSupplier), hiddenCount: all.filter((b) => !b.sameSupplier).length };
+}
+
+export function offsetCreditState(data: Dataset, rules: Rules, session: Session, poId: string) {
+  const po = poFigures(data, rules, poId);
+  if (po && po.creditOnPO === 0 && po.reserved === 0) return "no-credit";
+  return offsetCreditBlockers(data, rules, session, poId).length ? "blocked" : "available";
 }
 
 /* ------------------------------------------------------------ create/edit */
@@ -100,7 +123,7 @@ function validateDraft(
     (b) => b.bill.id === input.targetBillId,
   );
   if (!elig) return fail("Choose an eligible bill");
-  if (!elig.eligible) return fail(`${input.targetBillId} is not eligible: ${elig.reason}`);
+  if (!elig.eligible) return fail(elig.reason ?? "Choose an eligible bill");
   const lim = offsetLimits(data, rules, input.sourcePoId, input.targetBillId, existing?.id);
   if (!lim.ok) return lim;
   const amt = validateOffsetAmount(input.amountRaw, lim.value, rules);
@@ -122,7 +145,7 @@ export function createOffsetDraft(
   input: DraftInput,
 ): Result<{ data: Dataset; offsetId: string }> {
   const blockers = offsetCreditBlockers(data, rules, session, input.sourcePoId);
-  if (blockers.length) return fail(blockers.join("; "));
+  if (blockers.length) return fail(blockers[0] ?? "Cannot create offset");
   const amt = validateDraft(data, rules, input);
   if (!amt.ok) return amt;
   const id = nextOffsetId(data);
@@ -187,7 +210,7 @@ export function updateOffsetDraft(
   const offset = findOffset(data, offsetId);
   if (!offset) return fail(`Offset ${offsetId} not found`);
   const b = editBlockers(session, offset);
-  if (b.length) return fail(b.join("; "));
+  if (b.length) return fail(b[0] ?? "Cannot edit offset");
   if (input.sourcePoId !== offset.sourcePoId) return fail("The source PO of an offset cannot change");
   const amt = validateDraft(data, rules, input, offset);
   if (!amt.ok) return amt;
@@ -332,8 +355,7 @@ export function offsetActions(data: Dataset, rules: Rules, session: Session, off
   }
   if (isActiveStatus(s)) {
     const cb: string[] = [];
-    const r = roleBlock(session, "Purchasing", "cancel");
-    if (r) cb.push(r);
+    if (session.role !== "Purchasing" && session.role !== "Accounting") cb.push("Only Purchasing or Accounting can cancel");
     actions.push({ id: "cancel", label: "Cancel offset", blockers: cb, needsReason: false, tone: "danger" });
   }
   if (s === "Posted") {
@@ -359,7 +381,7 @@ export function runOffsetAction(
   if (!offset) return fail(`Offset ${offsetId} not found`);
   const action = offsetActions(data, rules, session, offset).find((a) => a.id === actionId);
   if (!action) return fail(`Action not available in ${offset.status}`);
-  if (action.blockers.length) return fail(action.blockers.join("; "));
+  if (action.blockers.length) return fail(action.blockers[0] ?? "Action unavailable");
   const reason = payload.reason?.trim() ?? "";
   if (action.needsReason && !reason) return fail("A reason is required");
   const po = findPo(data, offset.sourcePoId);
@@ -376,12 +398,14 @@ export function runOffsetAction(
         offset,
       });
       if (!fig.ok) return fig;
-      const n = offset.voidedMinutes.length + 1;
+      const previous = offset.voidedMinutes.find((m) => /^BBCTCN-\d{4}-\d{2}-\d{3,}/.test(m.number));
+      const base = previous?.number.replace(/^(BBCTCN-\d{4}-\d{2}-\d{3,})(?:-\d+)?$/, "$1") ?? nextDocumentNumber(data, "BBCTCN");
+      const n = offset.voidedMinutes.filter((m) => m.number === base || m.number.startsWith(`${base}-`)).length + 1;
       let next: Offset = {
         ...offset,
         status: "Awaiting signature",
         minutes: {
-          number: `BB-${offset.id.replace(/^OFS-/, "")}${n > 1 ? `-${n}` : ""}`,
+          number: `${base}${n > 1 ? `-${n}` : ""}`,
           generatedAt: stamp(data),
           generatedBy: session.userName,
           amount: offset.amount,
@@ -414,6 +438,7 @@ export function runOffsetAction(
       });
       if (!fig.ok) return fig;
       const at = stamp(data);
+      const journalId = nextDocumentNumber(data, "JE");
       const next = log(
         {
           ...offset,
@@ -423,11 +448,12 @@ export function runOffsetAction(
           postedAt: at,
           postedBy: session.userName,
           postingDate: data.asOfDate,
+          journalId,
         },
         data,
         session,
         "Approved and posted — numbers frozen",
-        `FX ${fmtMoney(fig.value.fx, fig.value.bookCurrency, rules)}`,
+        `${journalId} · FX ${fmtMoney(fig.value.fx, fig.value.bookCurrency, rules)}`,
       );
       return ok(replace(data, next));
     }
@@ -440,12 +466,15 @@ export function runOffsetAction(
       return ok(replace(data, next));
     }
     case "reverse": {
+      if (!offset.frozen) return fail("Original journal is missing");
+      const journalId = nextDocumentNumber(data, "JE");
+      const journal = offset.frozen.journal.map((line) => ({ ...line, debit: line.credit, credit: line.debit }));
       const next = log(
-        { ...offset, status: "Reversed", reversal: { reason, by: session.userName, at: stamp(data) } },
+        { ...offset, status: "Reversed", reversal: { reason, by: session.userName, at: stamp(data), journalId, journal } },
         data,
         session,
         "Reversed",
-        `${reason} (${fmtMoney(offset.amount, c, rules)} credit returned to ${offset.sourcePoId})`,
+        `${journalId} · ${reason} (${fmtMoney(offset.amount, c, rules)} credit returned to ${offset.sourcePoId})`,
       );
       return ok(replace(data, next));
     }

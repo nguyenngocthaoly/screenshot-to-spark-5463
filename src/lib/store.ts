@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { cloneDefaultRules, type Rules } from "@/config/rules";
-import { cloneSeed } from "@/data/seed";
+import { cloneSeed, seedData } from "@/data/seed";
 import type { Dataset, Role } from "@/data/types";
 import { reconcileOffsets } from "./offsetCalc";
 
@@ -77,7 +77,12 @@ export function hydrateStore() {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppState>;
       if (parsed.data && parsed.rules) {
-        state = { ...state, ...parsed, data: reconcileOffsets(parsed.data), rules: { ...cloneDefaultRules(), ...parsed.rules } };
+        const users = structuredClone(seedData.users);
+        const persona = users.find((u) => u.name === parsed.userName)
+          ?? users.find((u) => u.defaultRole === parsed.role)
+          ?? users[0];
+        state = { ...state, ...parsed, data: reconcileOffsets({ ...parsed.data, users }), rules: { ...cloneDefaultRules(), ...parsed.rules },
+          userName: persona?.name ?? "Linh", role: persona?.defaultRole ?? "Purchasing" };
       }
     }
   } catch {
@@ -135,4 +140,19 @@ export function importJson(text: string): string | null {
   } catch (e) {
     return e instanceof Error ? e.message : "Invalid JSON";
   }
+}
+
+/** Persona selection always derives permissions from the selected person. */
+export function setPersona(userId: string) {
+  const user = state.data.users.find((u) => u.id === userId);
+  if (!user) return;
+  setState({ role: user.defaultRole, userName: user.name });
+}
+
+export function personaLanding(role: Role) {
+  return role === "Accounting" || role === "Finance" ? "/overview" : "/";
+}
+
+export function personaOverviewTab(role: Role): "queue" | "credit" {
+  return role === "Finance" ? "credit" : "queue";
 }

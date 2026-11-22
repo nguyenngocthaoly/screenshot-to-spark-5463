@@ -5,9 +5,8 @@ import { Moon, Sun, Database, RotateCcw } from "lucide-react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
-import { hydrateStore, resetDemo, setRole, setState, useApp } from "@/lib/store";
+import { hydrateStore, resetDemo, setPersona, setState, useApp, personaLanding } from "@/lib/store";
 import { pendingReviewCount } from "@/lib/offsetCalc";
-import { ROLES, type Role } from "@/data/types";
 import { DataPanel } from "@/components/app/DataPanel";
 import { Btn, selectCls } from "@/components/app/bits";
 
@@ -79,8 +78,6 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-const homeFor = (r: Role) => (r === "Accounting" ? "/overview" : "/");
-
 function Header() {
   const s = useApp();
   const nav = useNavigate();
@@ -99,11 +96,12 @@ function Header() {
       </nav>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <label className="text-xs text-muted-foreground">Viewing as</label>
-        <select aria-label="Role" className={selectCls} value={s.role} onChange={(e) => { const r = e.target.value as Role; setRole(r); nav({ to: homeFor(r) }); }}>
-          {ROLES.map((r) => <option key={r}>{r}</option>)}
-        </select>
-        <select aria-label="User" className={selectCls} value={s.userName} onChange={(e) => setState({ userName: e.target.value })}>
-          {s.data.users.map((u) => <option key={u.id}>{u.name}</option>)}
+        <select aria-label="Viewing as" className={selectCls} value={s.data.users.find((u) => u.name === s.userName)?.id ?? ""} onChange={(e) => {
+          const persona = s.data.users.find((u) => u.id === e.target.value);
+          if (!persona) return;
+          setPersona(persona.id); nav({ to: personaLanding(persona.defaultRole) });
+        }}>
+          {s.data.users.map((u) => <option key={u.id} value={u.id}>{u.name} – {u.title ?? u.defaultRole}</option>)}
         </select>
         <Btn tone={s.dataPanelOpen ? "primary" : "secondary"} onClick={() => setState({ dataPanelOpen: !s.dataPanelOpen })}><Database className="size-3.5" /> Edit data</Btn>
         <Btn tone="secondary" onClick={() => { resetDemo(); nav({ to: "/" }); }}><RotateCcw className="size-3.5" /> Reset demo</Btn>

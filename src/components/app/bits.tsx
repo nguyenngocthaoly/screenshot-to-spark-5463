@@ -26,7 +26,7 @@ export function Blocked({ reasons }: { reasons: string[] }) {
   if (!reasons.length) return null;
   return (
     <ul className="mt-1 space-y-0.5">
-      {reasons.map((r) => (
+      {reasons.slice(0, 1).map((r) => (
         <li key={r} className="blocked-text">⛔ {r}</li>
       ))}
     </ul>

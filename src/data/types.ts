@@ -17,6 +17,7 @@ export interface User {
   id: string;
   name: string;
   defaultRole: Role;
+  title?: string;
 }
 
 export type PoStatus = "Open" | "Received" | "Closed short";
@@ -163,7 +164,8 @@ export interface Offset {
   postedAt: string | null;
   postedBy: string | null;
   postingDate: string | null;
-  reversal: { reason: string; by: string; at: string } | null;
+  journalId?: string;
+  reversal: { reason: string; by: string; at: string; journalId?: string; journal?: JournalLine[] } | null;
   frozenAttribution: Partial<Record<AttributionBasis, AttributionBasisRow[]>>;
   history: HistoryEntry[];
 }

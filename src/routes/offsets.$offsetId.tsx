@@ -126,7 +126,7 @@ function OffsetRecord() {
                   <tfoot><tr><td colSpan={4}>Advance side {fmtMoney(fig.value.advanceSide, fig.value.bookCurrency, rules)} · FX</td><td className="num"><M v={fig.value.fx} c={fig.value.bookCurrency} /></td></tr></tfoot>
                 </table>
               </Section>
-              <Section title="Journal preview">
+              <Section title={o.frozen ? "NetSuite journal" : "Journal preview"} right={o.journalId && <span className="num text-xs">{o.journalId}</span>}>
                 <table className="dt">
                   <thead><tr><th>Account</th><th>Description</th><th className="num">Debit</th><th className="num">Credit</th></tr></thead>
                   <tbody>{fig.value.journal.map((j) => <tr key={j.account}><td>{j.account}</td><td>{j.description}</td><td className="num">{j.debit ? fmtMoney(j.debit, fig.value.bookCurrency, rules) : ""}</td><td className="num">{j.credit ? fmtMoney(j.credit, fig.value.bookCurrency, rules) : ""}</td></tr>)}</tbody>
@@ -134,6 +134,15 @@ function OffsetRecord() {
                 </table>
               </Section>
             </div>
+          )}
+          {o.reversal && o.frozen && (
+            <Section title="Reversing journal" right={<span className="num text-xs">{o.reversal.journalId ?? "Legacy reversal"}</span>}>
+              <table className="dt">
+                <thead><tr><th>Account</th><th>Description</th><th className="num">Debit</th><th className="num">Credit</th></tr></thead>
+                <tbody>{(o.reversal.journal ?? o.frozen.journal.map((line) => ({ ...line, debit: line.credit, credit: line.debit }))).map((j) => <tr key={j.account}><td>{j.account}</td><td>{j.description}</td><td className="num">{j.debit ? fmtMoney(j.debit, o.frozen?.bookCurrency ?? "", rules) : ""}</td><td className="num">{j.credit ? fmtMoney(j.credit, o.frozen?.bookCurrency ?? "", rules) : ""}</td></tr>)}</tbody>
+                <tfoot><tr><td colSpan={2}>Totals · balanced</td><td className="num"><M v={o.frozen.totalCredit} c={o.frozen.bookCurrency} /></td><td className="num"><M v={o.frozen.totalDebit} c={o.frozen.bookCurrency} /></td></tr></tfoot>
+              </table>
+            </Section>
           )}
           <Minutes o={o} />
         </TabsContent>

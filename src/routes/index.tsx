@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { setState, useApp } from "@/lib/store";
 import { fmtMoney, supplierSummary, unusedCreditBook } from "@/lib/offsetCalc";
-import { offsetCreditBlockers } from "@/lib/offsetWorkflow";
+import { offsetCreditBlockers, offsetCreditState } from "@/lib/offsetWorkflow";
 import { Blocked, Btn, M, Section, StatusBadge, selectCls } from "@/components/app/bits";
 import { OffsetPanel } from "@/components/app/OffsetPanel";
 import { formatQty } from "@/lib/format";
@@ -78,7 +78,9 @@ function Workspace() {
                   <td className="num"><M v={p.reserved} c={p.currency} /></td>
                   <td className="num font-semibold"><M v={p.available} c={p.currency} /></td>
                   <td className="num">{u ? (u.ok ? <M v={u.value.historical} c={u.value.bookCurrency} /> : <span className="blocked-text">{u.error}</span>) : "—"}</td>
-                  <td className="w-64"><Btn disabled={b.length > 0} onClick={() => setPanel(p.po.id)}>Offset credit</Btn><Blocked reasons={b} /></td>
+                  <td className="w-64">{offsetCreditState(data, rules, session, p.po.id) === "no-credit"
+                    ? <span className="text-xs text-muted-foreground">No credit to offset</span>
+                    : <><Btn disabled={b.length > 0} onClick={() => setPanel(p.po.id)}>Offset credit</Btn><Blocked reasons={b} /></>}</td>
                 </tr>
               );
             })}

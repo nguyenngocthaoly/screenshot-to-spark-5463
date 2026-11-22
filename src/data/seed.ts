@@ -13,11 +13,11 @@ export const seedData: Dataset = {
     { id: "SUP-3", name: "Mekong Pepper JSC" },
   ],
   users: [
-    { id: "U-1", name: "Mai Tran", defaultRole: "Purchasing" },
-    { id: "U-2", name: "Hoa Pham", defaultRole: "Accounting" },
-    { id: "U-3", name: "Tuan Vo", defaultRole: "Accounting" },
-    { id: "U-4", name: "Nam Do", defaultRole: "Finance" },
-    { id: "U-5", name: "Lan Bui", defaultRole: "Account manager" },
+    { id: "U-1", name: "Linh", title: "Purchasing lead", defaultRole: "Purchasing" },
+    { id: "U-2", name: "Huệ", title: "Chief Accountant", defaultRole: "Accounting" },
+    { id: "U-3", name: "Thảo", title: "Accountant", defaultRole: "Accounting" },
+    { id: "U-4", name: "Mai", title: "Finance Manager", defaultRole: "Finance" },
+    { id: "U-5", name: "Tuấn", title: "Account Manager SO-A", defaultRole: "Account manager" },
   ],
   purchaseOrders: [
     { id: "PO-101", entityId: "ENT-A", supplierId: "SUP-1", currency: "USD", qtyOrdered: 5, unitPrice: 4000, qtyReceived: 3.8, status: "Closed short" },
