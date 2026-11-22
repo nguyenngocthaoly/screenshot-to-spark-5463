@@ -10,33 +10,63 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OverviewRouteImport } from './routes/overview'
+import { Route as TestsRouteImport } from './routes/tests'
+import { Route as OffsetsOffsetIdRouteImport } from './routes/offsets.$offsetId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OverviewRoute = OverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TestsRoute = TestsRouteImport.update({
+  id: '/tests',
+  path: '/tests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OffsetsOffsetIdRoute = OffsetsOffsetIdRouteImport.update({
+  id: '/offsets/$offsetId',
+  path: '/offsets/$offsetId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/overview': typeof OverviewRoute
+  '/tests': typeof TestsRoute
+  '/offsets/$offsetId': typeof OffsetsOffsetIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/overview': typeof OverviewRoute
+  '/tests': typeof TestsRoute
+  '/offsets/$offsetId': typeof OffsetsOffsetIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/overview': typeof OverviewRoute
+  '/tests': typeof TestsRoute
+  '/offsets/$offsetId': typeof OffsetsOffsetIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/overview' | '/tests' | '/offsets/$offsetId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/overview' | '/tests' | '/offsets/$offsetId'
+  id: '__root__' | '/' | '/overview' | '/tests' | '/offsets/$offsetId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  OverviewRoute: typeof OverviewRoute
+  TestsRoute: typeof TestsRoute
+  OffsetsOffsetIdRoute: typeof OffsetsOffsetIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +78,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/overview': {
+      id: '/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof OverviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tests': {
+      id: '/tests'
+      path: '/tests'
+      fullPath: '/tests'
+      preLoaderRoute: typeof TestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/offsets/$offsetId': {
+      id: '/offsets/$offsetId'
+      path: '/offsets/$offsetId'
+      fullPath: '/offsets/$offsetId'
+      preLoaderRoute: typeof OffsetsOffsetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  OverviewRoute: OverviewRoute,
+  TestsRoute: TestsRoute,
+  OffsetsOffsetIdRoute: OffsetsOffsetIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

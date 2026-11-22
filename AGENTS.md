@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Business numbers are computed only in `src/lib/offsetCalc.ts` (pure over data + rules); workflow/permissions live in `src/lib/offsetWorkflow.ts`; components only format. Why: the spec requires one auditable calculation layer.
+- App state is a frontend-only store (`src/lib/store.ts`) seeded from `src/data/seed.ts` and persisted in localStorage; no backend. Why: prototype scope.
