@@ -636,6 +636,26 @@ export interface SupplierCreditRow {
   atLatest: number;
   difference: number;
   errors: string[];
+  /** Unused credit restated in VND, or null when no usable rate exists. */
+  comparableVnd: number | null;
+}
+
+/**
+ * Unused credit in book currency restated to VND: the book value as-is when the
+ * book currency is VND, otherwise the book value at the latest USD/VND rate.
+ * null when the book currency has no USD/VND route.
+ */
+export function comparableVndValue(
+  data: Dataset,
+  rules: Rules,
+  bookCurrency: Currency,
+  bookValue: number,
+): number | null {
+  if (bookCurrency === "VND") return roundMoney(bookValue, "VND", rules);
+  if (bookCurrency !== "USD") return null;
+  const rate = latestRate(data, "USD", "VND", data.asOfDate);
+  if (!rate.ok) return null;
+  return roundMoney(bookValue * rate.value.rate, "VND", rules);
 }
 
 /** All suppliers by unused credit in book currency (one row per supplier and book currency). */
@@ -659,12 +679,25 @@ export function supplierCreditRanking(data: Dataset, rules: Rules): SupplierCred
         atLatest: b.atLatest,
         difference: b.difference,
         errors: b.errors,
+        comparableVnd: comparableVndValue(data, rules, b.bookCurrency, b.historical),
       });
     }
   }
-  return rows.sort((a, b) =>
-    a.bookCurrency === b.bookCurrency ? b.historical - a.historical : a.bookCurrency.localeCompare(b.bookCurrency),
-  );
+  const tie = (a: SupplierCreditRow, b: SupplierCreditRow) =>
+    a.bookCurrency.localeCompare(b.bookCurrency) || a.supplier.name.localeCompare(b.supplier.name);
+  return rows.sort((a, b) => {
+    if (a.comparableVnd === null || b.comparableVnd === null) {
+      if (a.comparableVnd !== null) return -1;
+      if (b.comparableVnd !== null) return 1;
+      return tie(a, b);
+    }
+    return a.comparableVnd === b.comparableVnd ? tie(a, b) : b.comparableVnd - a.comparableVnd;
+  });
+}
+
+/** Total comparable value across ranking rows, in VND (rows without a usable rate are excluded). */
+export function supplierCreditVndTotal(rows: SupplierCreditRow[], rules: Rules): number {
+  return roundMoney(sum(rows.map((r) => r.comparableVnd ?? 0)), "VND", rules);
 }
 
 /* ---------------------------------------------------------- SO attribution */

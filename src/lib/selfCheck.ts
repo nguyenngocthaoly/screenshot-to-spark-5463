@@ -6,6 +6,8 @@ import {
   computeOffsetFigures,
   poFigures,
   soAttribution,
+  supplierCreditRanking,
+  supplierCreditVndTotal,
   unusedCreditBook,
 } from "./offsetCalc";
 import { createOffsetDraft } from "./offsetWorkflow";
@@ -54,5 +56,10 @@ export function runSelfChecks(): CheckResult[] {
   const row = (id: string) => (attr.ok ? (attr.value.rows.find((r) => r.soId === id)?.amount ?? null) : null);
   check("SO attribution (source PO): SO-A", 3789.47, row("SO-A"));
   check("SO attribution (source PO): SO-B", 1010.53, row("SO-B"));
+
+  const ranking = supplierCreditRanking(data, rules);
+  check("Supplier credit ranked by comparable VND: top row", 329_950_000, ranking[0]?.comparableVnd ?? null,
+    ranking[0] ? `${ranking[0].supplier.name} (${ranking[0].bookCurrency})` : "no rows");
+  check("Supplier credit comparable total (VND)", 577_398_000, supplierCreditVndTotal(ranking, rules));
   return out;
 }

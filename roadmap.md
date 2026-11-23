@@ -7,6 +7,8 @@
 - [x] Plain validation messages without formula changes
 - [x] Neutral zero-credit PO state
 - [x] Automated and browser verification
-- [ ] Locked bilingual balance table in minutes
-- [ ] Result-specific action notifications
-- [ ] Verify locked balances, notifications and existing tests
+- [x] Locked bilingual balance table in minutes
+- [x] Result-specific action notifications
+- [x] Verify locked balances, notifications and existing tests
+- [x] Supplier credit tab: comparable value (VND) column, VND sort, VND total row
+- [x] Verify supplier credit column, sort, total and existing tests
